@@ -1,17 +1,12 @@
 package kire.apps.localTracker;
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.Rectangle;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-
 import javax.imageio.ImageIO;
-
 import boofcv.alg.filter.basic.GrayImageOps;
 import boofcv.core.image.ConvertBufferedImage;
 import boofcv.struct.image.ImageUInt8;
@@ -32,12 +27,12 @@ public class App {
 	private static int greenInt = green.getRGB();	
 	
 	private static BufferedImage image;
-	private static int minX = 0;
-	private static int maxX = 0;
-	private static int minY = 0;
-	private static int maxY = 0;
+	private static int minX;
+	private static int maxX;
+	private static int minY;
+	private static int maxY;
 
-	private static final int rowHeight = 72;
+	private static final int rowHeight = 48;
 	
 	private static ArrayList<Character> library = new ArrayList<Character>();
 	
@@ -66,14 +61,14 @@ public class App {
 		File dir = new File("imageRows");
 		File[] directoryListing = dir.listFiles();
 		if (directoryListing != null) {
-			int count = 0;
 			for (File child : directoryListing) {
 				image = ImageIO.read(child);
 		    	ArrayList<Character> characters = new ArrayList<Character>();
-		    	characters = getCharacters(0, 0, characters);
+		    	maxX = 0;
+		    	characters = getCharacters(0, 0, characters, 0);
 				String name = makeWord(characters);
 				nameList.add(name);
-				count++;
+				saveFile();
 			}
 		} else {
 			// Handle the case where dir is not really a directory.
@@ -88,50 +83,49 @@ public class App {
 		for(String name:nameList) {
 			System.out.println(name);
 		}
-    	
-    	
-    	
   
     }
     
-		private static ArrayList<Character> getCharacters(int startX, int startY, ArrayList<Character> characters) { 
-
-		    	// Iterate through image
-		    	for (int x = startX; x < image.getWidth(); x++) {
-		    		for (int y = startY; y < image.getHeight(); y++) {
-		    			if(!doesPixelExist(x,y)) {
-			            	int argb = image.getRGB(x, y);  
-			            	image.setRGB(x, y, greenInt);
-			            	// test to see if the pixel is black
-			            	if(isDark(argb)) {
-			                	image.setRGB(x, y, blueInt);	
-			                	// add this pixels unique ID to the list
-			            		idList.add(getID(x,y));
-			            		// Search neighbor pixels recursively
-			            		searchPixels(x, y);
-			            		
-			            		Character character = new Character(idList.size(),"");
-			            		characters.add(character);
-			            		
-
-			            		// recursively search for next character in the image
-			            		if(x == image.getWidth()-1 && y == image.getHeight()-1) {
-			            			System.out.println("Done!");
-			            			
-			            			return characters;
-			            		}
-			            		else {
-			            			getCharacters(maxX, 0, characters);
-			            		}
-			            		idList.clear();
-			            		
-			            		return characters;
-			            	}
+		private static ArrayList<Character> getCharacters(int startX, int startY, ArrayList<Character> characters, int totalPixels) { 
+	    	// Iterate through image
+	    	for (int x = startX; x < image.getWidth(); x++) {
+	    		for (int y = startY; y < image.getHeight(); y++) {
+	    			if(!doesPixelExist(x,y)) {
+	    				if(x > maxX + 20){
+	            			idList.clear();
+	            			image.setRGB(x, y, redInt);
+		            		return characters;
+	            		}
+		            	int argb = image.getRGB(x, y);  
+		            	image.setRGB(x, y, greenInt);
+		            	// test to see if the pixel is black
+	    			
+		            	if(isDark(argb)) {
+		                	image.setRGB(x, y, blueInt);	
+		                	// add this pixels unique ID to the list
+		            		idList.add(getID(x,y));
+		            		// Search neighbor pixels recursively to map out a character
+		            		searchPixels(x, y);
+		            		// Create character and add this 
+		            		int pixelCount = idList.size() - totalPixels;
+		            		Character character = new Character(pixelCount,"");
+		            		characters.add(character);
+		            		
+		            		System.out.println(minY);
+		            		getCharacters(maxX, maxY , characters, idList.size());
+		            		idList.clear();
+		            		
+		            		return characters;
+		            		
+		            		
 		            	}
 	            	}
-	            }
-		    	return characters;
-		}
+            	}
+            }
+	    	idList.clear();
+	    	return characters;
+	    
+	}
 
 		    	
 
@@ -163,10 +157,11 @@ public class App {
     }
     
 	private static void searchPixels(int x, int y) {
-		maxCheck(x, y);
+		
 		if (!doesPixelExist(x + 1, y) && x + 1 < image.getWidth()) {
 			int right = image.getRGB(x + 1, y);
 			if (isDark(right)) {
+				maxCheck(x+1, y);
 				image.setRGB(x + 1, y, redInt);
 				idList.add(getID(x + 1, y));
 				searchPixels(x + 1, y);
@@ -176,6 +171,7 @@ public class App {
 			// Check down direction
 			int down = image.getRGB(x, y + 1);
 			if (isDark(down)) {
+				maxCheck(x, y+1);
 				image.setRGB(x, y + 1, redInt);
 				idList.add(getID(x, y + 1));
 				searchPixels(x, y + 1);
@@ -185,6 +181,7 @@ public class App {
 			// Check left direction
 			int left = image.getRGB(x - 1, y);
 			if (isDark(left)) {
+				maxCheck(x-1, y);
 				image.setRGB(x - 1, y, redInt);
 				idList.add(getID(x - 1, y));
 				searchPixels(x - 1, y);
@@ -194,12 +191,13 @@ public class App {
 			// Check up direction - shouldn't be used much
 			int up = image.getRGB(x, y - 1);
 			if (isDark(up)) {
+				maxCheck(x, y-1);
 				image.setRGB(x, y - 1, redInt);
 				idList.add(getID(x, y - 1));
 				searchPixels(x, y - 1);
 			}
 		}
-
+		
 
 	
 } 
@@ -317,8 +315,8 @@ public class App {
     public static BufferedImage configureImage(BufferedImage image) {
     	// resize image
     	int type = image.getType() == 0? BufferedImage.TYPE_INT_ARGB : image.getType();
-    	int IMG_HEIGHT = image.getHeight()*3;
-    	int IMG_WIDTH = image.getWidth()*3;
+    	int IMG_HEIGHT = image.getHeight()*2;
+    	int IMG_WIDTH = image.getWidth()*2;
     	BufferedImage resizedImage1 = new BufferedImage(IMG_WIDTH, IMG_HEIGHT, type);
     	Graphics2D g = resizedImage1.createGraphics();
     	g.drawImage(image, 0, 0, IMG_WIDTH, IMG_HEIGHT, null);
